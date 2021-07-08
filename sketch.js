@@ -2,198 +2,208 @@ const Engine = Matter.Engine;
 const World = Matter.World;
 const Bodies = Matter.Bodies;
 const Constraint = Matter.Constraint;
+var engine, world, backgroundImg;
+var canvas, angle, tower, ground, cannon, boat;
+var balls = [];
+var boats = [];
+var score = 0;
+var boatAnimation = [];
+var boatSpritedata, boatSpritesheet;
 
-var engine, world;
-var canvas;
-var palyer, playerBase, playerArcher;
-var computer, computerBase, computerArcher;
-var playerArrows = [];
-var computerArrows = [];
-var playerArcherLife = 3;
-var computerArcherLife = 3;
+var brokenBoatAnimation = [];
+var brokenBoatSpritedata, brokenBoatSpritesheet;
 
+var waterSplashAnimation = [];
+var waterSplashSpritedata, waterSplashSpritesheet;
+
+var isGameOver = false;
+var watersound,laughsound,backgroundmusic,cannonexplo;
+var isLaughing = false
+var isGameOver =false
 function preload() {
   backgroundImg = loadImage("./assets/background.gif");
+  towerImage = loadImage("./assets/tower.png");
+  boatSpritedata = loadJSON("assets/boat/boat.json");
+  boatSpritesheet = loadImage("assets/boat/boat.png");
+  brokenBoatSpritedata = loadJSON("assets/boat/broken_boat.json");
+  brokenBoatSpritesheet = loadImage("assets/boat/broken_boat.png");
+  waterSplashSpritedata = loadJSON("assets/water_splash/water_splash.json");
+  waterSplashSpritesheet = loadImage("assets/water_splash/water_splash.png");
+  watersound = loadSound("assets/cannon_water.mp3");
+  laughsound = loadSound("assets/pirate_laugh.mp3");
+  backgroundmusic =loadSound("assets/background_music.mp3");
+ cannonexplo =loadSound("assets/cannon_explosion.mp3");
+
+
+
+
 }
 
-function setup() {
-  canvas = createCanvas(windowWidth, windowHeight);
 
+function setup() {
+  canvas = createCanvas(1200,600);
   engine = Engine.create();
   world = engine.world;
+  angle = -PI / 4;
+  ground = new Ground(0, height - 1, width * 2, 1);
+  tower = new Tower(150, 350, 160, 310);
+  cannon = new Cannon(180, 110, 100, 50, angle);
 
-  playerBase = new PlayerBase(300, random(450, height - 300), 180, 150);
-  player = new Player(285, playerBase.body.position.y - 153, 50, 180);
-  playerArcher = new PlayerArcher(
-    340,
-    playerBase.body.position.y - 180,
-    120,
-    120
-  );
+  var boatFrames = boatSpritedata.frames;
+  for (var i = 0; i < boatFrames.length; i++) {
+    var pos = boatFrames[i].position;
+    var img = boatSpritesheet.get(pos.x, pos.y, pos.w, pos.h);
+    boatAnimation.push(img);
+  }
 
-  computerBase = new ComputerBase(
-    width - 300,
-    random(450, height - 300),
-    180,
-    150
-  );
-  computer = new Computer(
-    width - 280,
-    computerBase.body.position.y - 153,
-    50,
-    180
-  );
+  var brokenBoatFrames = brokenBoatSpritedata.frames;
+  for (var i = 0; i < brokenBoatFrames.length; i++) {
+    var pos = brokenBoatFrames[i].position;
+    var img = brokenBoatSpritesheet.get(pos.x, pos.y, pos.w, pos.h);
+    brokenBoatAnimation.push(img);
+  }
 
-  computerArcher = new ComputerArcher(
-    width - 350,
-    computerBase.body.position.y - 180,
-    120,
-    120
-  );
-  handleComputerArcher();
+  var waterSplashFrames = waterSplashSpritedata.frames;
+  for (var i = 0; i < waterSplashFrames.length; i++) {
+    var pos = waterSplashFrames[i].position;
+    var img = waterSplashSpritesheet.get(pos.x, pos.y, pos.w, pos.h);
+    waterSplashAnimation.push(img);
+  }
 }
 
 function draw() {
-  background(backgroundImg);
+  background(189);
+  image(backgroundImg, 0, 0, width, height);
+if (!backgroundmusic.isPlaying()){
+backgroundmusic.play()
+backgroundmusic.setVolume(0.1)
 
+}
   Engine.update(engine);
+  ground.display();
 
-  // Title
-  fill("#FFFF");
-  textAlign("center");
+  showBoats();
+
+  for (var i = 0; i < balls.length; i++) {
+    showCannonBalls(balls[i], i);
+    for (var j = 0; j < boats.length; j++) {
+      if (balls[i] !== undefined && boats[j] !== undefined) {
+        var collision = Matter.SAT.collides(balls[i].body, boats[j].body);
+        if (collision.collided) {
+          if (!boats[j].isBroken && !balls[i].isSink) {
+            score += 5;
+            boats[j].remove(j);
+            j--;
+          }
+
+          Matter.World.remove(world, balls[i].body);
+          balls.splice(i, 1);
+          i--;
+        }
+      }
+    }
+  }
+
+  cannon.display();
+  tower.display();
+
+  fill("#6d4c41");
   textSize(40);
-  text("EPIC ARCHERY", width / 2, 100);
-
-  for (var i = 0; i < playerArrows.length; i++) {
-    showArrows(i, playerArrows);
-  }
-
-  playerBase.display();
-  player.display();
-  player.life();
-  playerArcher.display();
-  handlePlayerArrowCollision();
-
-  for (var i = 0; i < computerArrows.length; i++) {
-    showArrows(i, computerArrows);
-  }
-
-  computerBase.display();
-  computer.display();
-  computer.life();
-  computerArcher.display();
-  handleComputerArrowCollision();
+  text(`Score:${score}`, width - 200, 50);
+  textAlign(CENTER, CENTER);
 }
 
 function keyPressed() {
-  if (keyCode === 32) {
-    var posX = playerArcher.body.position.x;
-    var posY = playerArcher.body.position.y;
-    var angle = playerArcher.body.angle;
+  if (keyCode === DOWN_ARROW) {
+    cannonexplo.play()
+    var cannonBall = new CannonBall(cannon.x, cannon.y);
+    cannonBall.trajectory = [];
+    Matter.Body.setAngle(cannonBall.body, cannon.angle);
+    balls.push(cannonBall);
 
-    var arrow = new PlayerArrow(posX, posY, 100, 10, angle);
+  }
+}
 
-    arrow.trajectory = [];
-    Matter.Body.setAngle(arrow.body, angle);
-    playerArrows.push(arrow);
+function showCannonBalls(ball, index) {
+  ball.display();
+  ball.animate();
+  if (ball.body.position.x >= width || ball.body.position.y >= height - 50) {
+    if (!ball.isSink) {
+      watersound.play()
+      ball.remove(index);
+
+    }
+  }
+}
+
+function showBoats() {
+  if (boats.length > 0) {
+    if (
+      boats.length < 4 &&
+      boats[boats.length - 1].body.position.x < width - 300
+    ) {
+      var positions = [-40, -60, -70, -20];
+      var position = random(positions);
+      var boat = new Boat(
+        width,
+        height - 100,
+        170,
+        170,
+        position,
+        boatAnimation
+      );
+
+      boats.push(boat);
+    }
+
+    for (var i = 0; i < boats.length; i++) {
+      Matter.Body.setVelocity(boats[i].body, {
+        x: -0.9,
+        y: 0
+      });
+
+      boats[i].display();
+      boats[i].animate();
+      var collision = Matter.SAT.collides(tower.body, boats[i].body);
+
+      if (collision.collided && !boats[i].isBroken) {
+        //Added isLaughing flag and setting isLaughing to true 
+        if(!isLaughing && !laughsound.isPlaying()){
+          laughsound.play();
+          isLaughing = true 
+         }
+       
+        
+        isGameOver = true;
+        gameOver();
+      }
+    }
+  } else {
+    var boat = new Boat(width, height - 60, 170, 170, -60, boatAnimation);
+    boats.push(boat);
   }
 }
 
 function keyReleased() {
-  if (keyCode === 32) {
-    if (playerArrows.length) {
-      var angle = playerArcher.body.angle;
-      playerArrows[playerArrows.length - 1].shoot(angle);
-    }
+  if (keyCode === DOWN_ARROW && !isGameOver) {
+    balls[balls.length - 1].shoot();
   }
 }
 
-function showArrows(index, arrows) {
-  arrows[index].display();
-
-}
-
-function handleComputerArcher() {
-  if (!computerArcher.collapse && !playerArcher.collapse) {
-    setTimeout(() => {
-      var pos = computerArcher.body.position;
-      var angle = computerArcher.body.angle;
-      var moves = ["UP", "DOWN"];
-      var move = random(moves);
-      var angleValue;
-
-      if (move === "UP") {
-        angleValue = 0.1;
-      } else {
-        angleValue = -0.1;
+function gameOver() {
+  swal(
+    {
+      title: `Game Over!!!`,
+      text: "Thanks for playing!!",
+      imageUrl:
+        "https://raw.githubusercontent.com/whitehatjr/PiratesInvasion/main/assets/boat.png",
+      imageSize: "150x150",
+      confirmButtonText: "Play Again"
+    },
+    function(isConfirm) {
+      if (isConfirm) {
+        location.reload();
       }
-      angle += angleValue;
-
-      var arrow = new ComputerArrow(pos.x, pos.y, 100, 10, angle);
-
-      Matter.Body.setAngle(computerArcher.body, angle);
-      Matter.Body.setAngle(computerArcher.body, angle);
-
-      computerArrows.push(arrow);
-      setTimeout(() => {
-        computerArrows[computerArrows.length - 1].shoot(angle);
-      }, 100);
-
-      handleComputerArcher();
-    }, 2000);
-  }
-}
-
-function handlePlayerArrowCollision() {
-  for (var i = 0; i < playerArrows.length; i++) {
-    var baseCollision = Matter.SAT.collides(
-      playerArrows[i].body,
-      computerBase.body
-    );
-
-    var archerCollision = Matter.SAT.collides(
-      playerArrows[i].body,
-      computerArcher.body
-    );
-
-    var computerCollision = Matter.SAT.collides(
-      playerArrows[i].body,
-      computer.body
-    );
-
-    if (
-      baseCollision.collided ||
-      archerCollision.collided ||
-      computerCollision.collided
-    ) {
-     console.log("PlayerArrow Collided")
     }
-  }
-}
-
-function handleComputerArrowCollision() {
-  for (var i = 0; i < computerArrows.length; i++) {
-    var baseCollision = Matter.SAT.collides(
-      computerArrows[i].body,
-      playerBase.body
-    );
-
-    var archerCollision = Matter.SAT.collides(
-      computerArrows[i].body,
-      playerArcher.body
-    );
-
-    var playerCollision = Matter.SAT.collides(
-      computerArrows[i].body,
-      player.body
-    );
-
-    if (
-      baseCollision.collided ||
-      archerCollision.collided ||
-      playerCollision.collided
-    ) {
-      console.log("ComputerArrow Collided")
-    }
-  }
+  );
 }
